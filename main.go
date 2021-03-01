@@ -12,7 +12,7 @@ type CommunityCards struct {
 	Cards  []Card
 }
 
-// Tells you the status of the gare
+// Tells you the status of the game
 func (t *CommunityCards) status() int {
 	switch len(t.Cards) {
 	case 0: // pre-flop
@@ -31,6 +31,12 @@ func (t *CommunityCards) status() int {
 type Card struct {
 	Number int8
 	Suit   Char
+}
+
+type PlayerCombination struct {
+	CombinationID int8
+	Data []int8
+	Kickers []Card
 }
 
 type ByNumber []Card
@@ -62,10 +68,14 @@ func (s Char) String() string {
 	return fmt.Sprintf("%c", s)
 }
 
-func getAllNumbers() []int8 {
-	return []int8{
+func getAllNumbers(doubleAce bool) []int8 {
+	cards := []int8{
 		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
 	}
+	if doubleAce {
+		cards = append(cards, 14)
+	}
+	return cards
 }
 
 func getAllSuits() []Char {
@@ -77,7 +87,7 @@ func getAllSuits() []Char {
 func createDeck() []Card {
 	var deck []Card
 	for _, s := range getAllSuits() {
-		for _, n := range getAllNumbers() {
+		for _, n := range getAllNumbers(false) {
 			deck = append(deck, Card{n, s})
 		}
 	}
@@ -138,7 +148,7 @@ func findMultipleSameNumbers(cards []Card, nr int) (map[int8]int8, bool) {
 // Tries to find one pair
 func checkMultiples(cards []Card, nr int) (int8, []Card) {
 	var kickers []Card
-	values, found := findMultipleSameNumbers(cards, 2)
+	values, found := findMultipleSameNumbers(cards, nr)
 	if !found {
 		return 0, kickers
 	}
@@ -188,7 +198,31 @@ func checkTrips(cards []Card) (int8, []Card) {
 }
 
 func checkPoker(cards []Card) (int8, []Card) {
-	return checkMultiples(cards, 5)
+	return checkMultiples(cards, 4)
+}
+
+func checkStraight(cards []Card) (int8, []Card) {
+	store := make(map[int8]int8)
+	for _, card := range cards {
+		store[card.Number]++
+		if card.Number == 1 { // An ace also counts as last card
+			store[int8(14)]++
+		}
+	}
+
+	var consecutive, found int8 = 0, 0
+	for _, nr := range getAllNumbers(true) {
+		if _, ok := store[nr]; ok {
+			consecutive++
+			if consecutive >=5 {
+				found = nr
+			}
+		} else {
+			consecutive = 0
+		}
+	}
+
+	return found, cards
 }
 
 // Retrieves scenarios from the job queue and crunches them
@@ -202,25 +236,52 @@ func casinoWorker(results chan<- int, jobs <-chan Game) {
 		cardsLeftToPull := mapping[tableStatus]
 		cardsPulled := getRandomCardsFromDeck(&deck, cardsLeftToPull)
 		communityCards = append(communityCards, cardsPulled...)
+		var playerHands = make(map[int]PlayerCombination)
 
 		// Calculate the best combination each player holds
-		for _, hand := range work.Hands {
+		for playerIndex, hand := range work.Hands {
 			handCards := hand.Cards
 			var playerCardPool []Card = communityCards
 			playerCardPool = append(playerCardPool, handCards[0], handCards[1])
-
+			var foundInt int8
+			var foundSlice []int8
 			if len(playerCardPool) != 7 {
 				panic("Player should have 7 cards available in total")
 			}
 
-			// Check pair
-			foundPair, kickersPair := checkOnePair(playerCardPool)
-			//found2, kickers2 := checkTwoPairs(playerCardPool)
-			//found, kickers := checkTrips(playerCardPool)
-			//found, kickers := checkPoker(playerCardPool)
+			// The best hand rank returns the lower value
 
-			fmt.Println(foundPair, hand, kickersPair)
+			// sf 1
+			foundInt, kickers := checkPoker(playerCardPool)
+			if foundInt > 0{
+				playerHands[playerIndex] = PlayerCombination{2, []int8{foundInt}, kickers}
+				continue
+			}
+			// full 3
+			// flush 4
+			foundInt, kickers = checkStraight(playerCardPool)
+			if foundInt > 0{
+				playerHands[playerIndex] = PlayerCombination{5, []int8{foundInt}, kickers}
+				continue
+			}
+			foundInt, kickers = checkTrips(playerCardPool)
+			if foundInt > 0{
+				playerHands[playerIndex] = PlayerCombination{6, []int8{foundInt}, kickers}
+				continue
+			}
+			foundSlice, kickers = checkTwoPairs(playerCardPool)
+			if len(foundSlice) == 2{
+				playerHands[playerIndex] = PlayerCombination{7, foundSlice, kickers}
+				continue
+			}
+			foundInt, kickers = checkOnePair(playerCardPool)
+			if foundInt > 0{
+				playerHands[playerIndex] = PlayerCombination{8, []int8{foundInt}, kickers}
+				continue
+			}
+			playerHands[playerIndex] = PlayerCombination{9, []int8{}, kickers}
 
+			fmt.Println(hand)
 		}
 		results <- 2
 	}
@@ -249,8 +310,8 @@ func main() {
 	}
 	h2 := Hand{
 		[2]Card{
+			Card{8, 'C'},
 			Card{10, 'C'},
-			Card{11, 'C'},
 		},
 	}
 
