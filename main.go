@@ -145,7 +145,6 @@ func findMultipleSameNumbers(cards []Card, nr int) (map[int8]int8, bool) {
 	return store, found
 }
 
-// Tries to find one pair
 func checkMultiples(cards []Card, nr int) (int8, []Card) {
 	var kickers []Card
 	values, found := findMultipleSameNumbers(cards, nr)
@@ -201,7 +200,7 @@ func checkPoker(cards []Card) (int8, []Card) {
 	return checkMultiples(cards, 4)
 }
 
-func checkStraight(cards []Card) (int8, []Card) {
+func checkStraight(cards []Card) (int8) {
 	store := make(map[int8]int8)
 	for _, card := range cards {
 		store[card.Number]++
@@ -221,9 +220,58 @@ func checkStraight(cards []Card) (int8, []Card) {
 			consecutive = 0
 		}
 	}
-
-	return found, cards
+	return found
 }
+
+func checkFullHouse(cards []Card) ([]int8) {
+	trips, kickers := checkTrips(cards)
+	if trips > 0 {
+		pair, _ := checkOnePair(kickers)
+		if pair > 0 {
+			return []int8{trips, pair}
+		}
+	}
+	return []int8{}
+}
+
+func findItemInSlice(source []int8, value int8) bool {
+	for _, item := range source {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func checkFlush(cards []Card) ([]int8) {
+	store := make(map[Char][]int8)
+	for _, card := range cards {
+		store[card.Suit] = append(store[card.Suit], card.Number)
+	}
+
+	var found []int8
+	for i, item := range store {
+		if len(item) >= 5 {
+			for _, nr := range store[i] {
+				found = append(found, nr)
+			}
+		}
+
+	}
+	if len(found) == 0 {
+		return []int8{}
+	}
+
+	// Sort ascending, but take into account the ace
+	sort.Slice(found, func(i, j int) bool {
+		return (found[i] < found[j] && found[i] > 1)
+	})
+	// Keep only the 5 highest ones
+	found = found[len(found)-5:]
+
+	return found
+}
+
 
 // Retrieves scenarios from the job queue and crunches them
 func casinoWorker(results chan<- int, jobs <-chan Game) {
@@ -257,11 +305,19 @@ func casinoWorker(results chan<- int, jobs <-chan Game) {
 				playerHands[playerIndex] = PlayerCombination{2, []int8{foundInt}, kickers}
 				continue
 			}
-			// full 3
-			// flush 4
-			foundInt, kickers = checkStraight(playerCardPool)
+			foundSlice = checkFullHouse(playerCardPool)
+			if len(foundSlice) > 0{
+				playerHands[playerIndex] = PlayerCombination{3, []int8{foundInt}, []Card{}}
+				continue
+			}
+			foundSlice = checkFlush(playerCardPool)
+			if len(foundSlice) > 0{
+				playerHands[playerIndex] = PlayerCombination{4, []int8{foundInt}, []Card{}}
+				continue
+			}
+			foundInt = checkStraight(playerCardPool)
 			if foundInt > 0{
-				playerHands[playerIndex] = PlayerCombination{5, []int8{foundInt}, kickers}
+				playerHands[playerIndex] = PlayerCombination{5, []int8{foundInt}, []Card{}}
 				continue
 			}
 			foundInt, kickers = checkTrips(playerCardPool)
@@ -310,7 +366,7 @@ func main() {
 	}
 	h2 := Hand{
 		[2]Card{
-			Card{8, 'C'},
+			Card{8, 'H'},
 			Card{10, 'C'},
 		},
 	}
@@ -318,7 +374,16 @@ func main() {
 	addHandToTable(h1, &deck, &hands)
 	addHandToTable(h2, &deck, &hands)
 
-	var table CommunityCards = CommunityCards{}
+	var insertCards = []Card{
+		Card{2, 'H'},
+		Card{3, 'H'},
+		Card{9, 'H'},
+		Card{10, 'H'},
+		Card{6, 'H'},
+	}
+	var table CommunityCards = CommunityCards{
+		insertCards,
+	}
 
 	workers := 1
 	simulations := 10
