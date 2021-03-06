@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"sort"
 	"time"
 )
@@ -41,22 +40,6 @@ type PlayerCombination struct {
 	Kickers []Card
 }
 
-// Gets a human-readable combination name
-func getCombinationType (input int8) (string) {
-	mapping := map[int]string{
-		1: "Straight Flush",
-		2: "Poker",
-		3: "Full House",
-		4: "Flush",
-		5: "Straight",
-		6: "Trips",
-		7: "Two Pairs",
-		8: "One Pair",
-		9: "High Card",
-	}
-	return mapping[int(input)]
-}
-
 // Formats the players hand
 func (combo PlayerCombination) print() string {
 	if len(combo.Kickers) == 0 {
@@ -92,68 +75,6 @@ type Game struct {
 
 func (s Char) String() string {
 	return fmt.Sprintf("%c", s)
-}
-
-func getAllNumbers(doubleAce bool) []int8 {
-	cards := []int8{
-		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-	}
-	if doubleAce {
-		cards = append(cards, 14)
-	}
-	return cards
-}
-
-func getAllSuits() []Char {
-	return []Char{
-		'H', 'D', 'C', 'S',
-	}
-}
-
-// Creates a 52 cards deck
-func createDeck() []Card {
-	var deck []Card
-	for _, s := range getAllSuits() {
-		for _, n := range getAllNumbers(false) {
-			deck = append(deck, Card{n, s})
-		}
-	}
-	return deck
-}
-
-// Removes one card from the passed deck of cards
-func removeCardFromSlice(s *[]Card, i int) {
-	(*s)[i] = (*s)[len(*s)-1]
-	*s = (*s)[:len(*s)-1]
-}
-
-// Takes the 2 player cards out of the deck
-func addHandToTable(hand Hand, deck *[]Card, hands *[]Hand) {
-	*hands = append(*hands, hand)
-	for _, card := range hand.Cards {
-		addCardToTable(card, deck)
-	}
-}
-
-func addCardToTable(card Card, deck *[]Card) {
-	for i, deck_card := range *deck {
-		if card == deck_card {
-			removeCardFromSlice(deck, i)
-		}
-	}
-}
-
-// Extracts n amount of cards from the deck
-func getRandomCardsFromDeck(deck *[]Card, nr int) ([]Card) {
-	var cards []Card
-	for i := 0; i < nr; i++ {
-		deckLen := len(*deck)
-		pick := rand.Intn(deckLen)
-		crd := (*deck)[pick]
-		removeCardFromSlice(deck, pick)
-		cards = append(cards, crd)
-	}
-	return cards
 }
 
 // find 2, 3, or 4 of the same numbers on a slice of cards
@@ -321,16 +242,6 @@ func checkFlush(cards []Card) ([]int8) {
 	return found
 }
 
-func checkDeckHealth(deck []Card) {
-	store := make(map[Card]int)
-	for _, crd := range deck {
-		store[crd]++
-		if store[crd] > 1 {
-			panic("Deck has duplicate cards")
-		}
-	}
-}
-
 type Outcome struct {
 	Win int
 	Tie int
@@ -341,18 +252,24 @@ func getOutcomes() Outcome {
 	return Outcome{1,2,3}
 }
 
+// Registers a players best hand and determines if it beats the previous best
 func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCombination, winners *int) {
 	fmt.Printf("Player %v has: %v", id, candidate.print())
 
+	// If there is not previous hand, this hand wins automatically
+	// If this hand has the better combinations, it wins
 	if (*lastBest).CombinationID == 0 || candidate.CombinationID < (*lastBest).CombinationID {
 		// clear win for the candidate
 		*lastBest = candidate
 		*winners = id
 		return
 	} else if candidate.CombinationID > (*lastBest).CombinationID {
-		// clear loss for the candidate
+		// Loss for the candidate
 		return
 	}
+
+	// From here down, the previous best and the candidate have the best combination
+	// We need to compare in more detail
 
 	outcomes := getOutcomes()
 
@@ -513,41 +430,36 @@ func casinoWorker(results chan<- int, jobs <-chan Game) {
 	fmt.Println("Worker done")
 }
 
-// Tells you how many community cards we still need to pull from deck
-func getStatusMap() map[int]int {
-	mapping := make(map[int]int)
-	mapping[0] = 5
-	mapping[1] = 2
-	mapping[2] = 1
-	mapping[3] = 0
-	return mapping
-}
-
 func main() {
-	start := time.Now()
+
 	deck := createDeck()
 	var hands []Hand
 
 	h1 := Hand{
 		[2]Card{
 			Card{1, 'H'},
-			Card{13, 'H'},
+			Card{2, 'H'},
 		},
 	}
 	h2 := Hand{
 		[2]Card{
-			Card{8, 'C'},
-			Card{3, 'C'},
+			Card{1, 'C'},
+			Card{2, 'C'},
+		},
+	}
+	h3 := Hand{
+		[2]Card{
+			Card{10, 'C'},
+			Card{1, 'D'},
 		},
 	}
 
 	addHandToTable(h1, &deck, &hands)
 	addHandToTable(h2, &deck, &hands)
+	addHandToTable(h3, &deck, &hands)
 
 	var insertCards = []Card{
-		Card{6, 'H'},
-		Card{6, 'C'},
-		Card{6, 'S'},
+		//Card{6, 'H'},
 	}
 	table := CommunityCards{
 		insertCards,
@@ -558,13 +470,20 @@ func main() {
 		addCardToTable(c, &deck)
 	}
 
-	workers := 1
-	simulations := 20
+	var workers, simulations int
+	for ;workers==0; {
+		fmt.Println("Number of threads to use: ")
+		fmt.Scanf("%d", &workers)
+	}
 
+	for ;simulations==0; {
+		fmt.Println("Number of simulated games to run: ")
+		fmt.Scanf("%d", &simulations)
+	}
+
+	start := time.Now()
 	resultsChannel := make(chan int, simulations)
 	jobsChannel := make(chan Game, simulations)
-	var results []int
-
 
 	for i := 0; i < workers; i++ {
 		go casinoWorker(resultsChannel, jobsChannel)
@@ -581,10 +500,29 @@ func main() {
 		}
 		jobsChannel <- setting
 	}
+
 	close(jobsChannel)
+	results := make(map[int]int)
+	winCount := 0
+
 	for i := 0; i < simulations; i++ {
-		results = append(results, <- resultsChannel)
+		winner := <- resultsChannel
+		if winner >= 0 {
+			results[winner]++
+			winCount++
+		}
 	}
+	fmt.Println("-------")
+	simulationsF := float64(simulations)
+
+	for i, wins := range results {
+		winProbability := float64(wins)/simulationsF*100
+		fmt.Printf("Player ID %v win probability: %f%% \n", i, winProbability)
+	}
+
+	splitProbability := (simulationsF-float64(winCount))/simulationsF*100
+	fmt.Printf("Split probability: %f%% \n\n", splitProbability)
+
 	elapsed := time.Since(start)
 	log.Printf("Program took %s", elapsed)
 }
