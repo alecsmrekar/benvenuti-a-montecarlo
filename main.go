@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"sort"
 	"time"
 )
@@ -10,7 +11,7 @@ import (
 type Char byte
 
 type CommunityCards struct {
-	Cards  []Card
+	Cards []Card
 }
 
 // Tells you the status of the game
@@ -31,14 +32,14 @@ func (t *CommunityCards) status() int {
 
 type Combinations struct {
 	StraightFlush int8
-	Poker int8
-	FullHouse int8
-	Flush int8
-	Straight int8
-	Trips int8
-	TwoPairs int8
-	OnePair int8
-	HighCard int8
+	Poker         int8
+	FullHouse     int8
+	Flush         int8
+	Straight      int8
+	Trips         int8
+	TwoPairs      int8
+	OnePair       int8
+	HighCard      int8
 }
 
 type Card struct {
@@ -48,8 +49,8 @@ type Card struct {
 
 type PlayerCombination struct {
 	CombinationID int8
-	Data []int8
-	Kickers []Card
+	Data          []int8
+	Kickers       []Card
 }
 
 // Formats the players hand
@@ -63,17 +64,16 @@ func (combo PlayerCombination) print() string {
 type ByNumber []Card
 
 // Implement sort interface for cards
-func (a ByNumber) Len() int           { return len(a) }
+func (a ByNumber) Len() int { return len(a) }
 func (a ByNumber) Less(i, j int) bool {
-	if a[i].Number == 1{
+	if a[i].Number == 1 {
 		return false
-	} else if a[j].Number == 1{
+	} else if a[j].Number == 1 {
 		return true
 	}
 	return int(a[i].Number) < int(a[j].Number)
 }
-func (a ByNumber) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-
+func (a ByNumber) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
 type Hand struct {
 	Cards [2]Card
@@ -82,11 +82,125 @@ type Hand struct {
 type Game struct {
 	Table CommunityCards
 	Hands []Hand
-	Deck []Card
+	Deck  []Card
 }
 
 func (s Char) String() string {
 	return fmt.Sprintf("%c", s)
+}
+
+func getAllNumbers(doubleAce bool) []int8 {
+	cards := []int8{
+		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+	}
+	if doubleAce {
+		cards = append(cards, 14)
+	}
+	return cards
+}
+
+func getAllSuits() []Char {
+	return []Char{
+		'H', 'D', 'C', 'S',
+	}
+}
+
+// Creates a 52 cards deck
+func createDeck() []Card {
+	var deck []Card
+	for _, s := range getAllSuits() {
+		for _, n := range getAllNumbers(false) {
+			deck = append(deck, Card{n, s})
+		}
+	}
+	return deck
+}
+
+// Removes one card from the passed deck of cards
+func removeCardFromSlice(s *[]Card, i int) {
+	(*s)[i] = (*s)[len(*s)-1]
+	*s = (*s)[:len(*s)-1]
+}
+
+// Takes the 2 player cards out of the deck
+func addHandToTable(hand Hand, deck *[]Card, hands *[]Hand) {
+	*hands = append(*hands, hand)
+	for _, card := range hand.Cards {
+		addCardToTable(card, deck)
+	}
+}
+
+func addCardToTable(card Card, deck *[]Card) {
+	for i, deck_card := range *deck {
+		if card == deck_card {
+			removeCardFromSlice(deck, i)
+		}
+	}
+}
+
+// Extracts n amount of cards from the deck
+func getRandomCardsFromDeck(deck *[]Card, nr int) []Card {
+	var cards []Card
+	for i := 0; i < nr; i++ {
+		deckLen := len(*deck)
+		pick := rand.Intn(deckLen)
+		crd := (*deck)[pick]
+		removeCardFromSlice(deck, pick)
+		cards = append(cards, crd)
+	}
+	return cards
+}
+
+// Gets a human-readable combination name
+func getCombinationName(input int8) string {
+	combos := getCombinations()
+	mapping := map[int8]string{
+		combos.StraightFlush: "Straight Flush",
+		combos.Poker:         "Poker",
+		combos.FullHouse:     "Full House",
+		combos.Flush:         "Flush",
+		combos.Straight:      "Straight",
+		combos.Trips:         "Trips",
+		combos.TwoPairs:      "Two Pairs",
+		combos.OnePair:       "One Pair",
+		combos.HighCard:      "High Card",
+	}
+	return mapping[input]
+}
+
+func getCombinations() Combinations {
+	return Combinations{
+		StraightFlush: 1,
+		Poker:         2,
+		FullHouse:     3,
+		Flush:         4,
+		Straight:      5,
+		Trips:         6,
+		TwoPairs:      7,
+		OnePair:       8,
+		HighCard:      9,
+	}
+}
+
+// Checks if the deck has duplicate cards
+func checkDeckHealth(deck []Card) {
+	store := make(map[Card]int)
+	for _, crd := range deck {
+		store[crd]++
+		if store[crd] > 1 {
+			panic("Deck has duplicate cards")
+		}
+	}
+}
+
+// Tells you how many community cards we still need to pull from deck
+func getStatusMap() map[int]int {
+	mapping := make(map[int]int)
+	mapping[0] = 5
+	mapping[1] = 2
+	mapping[2] = 1
+	mapping[3] = 0
+	return mapping
 }
 
 // find 2, 3, or 4 of the same numbers on a slice of cards
@@ -138,7 +252,6 @@ func checkMultiples(cards []Card, nr int, kickerNr int) (int8, []Card) {
 	return max, kickers
 }
 
-
 // Tries to find two pairs
 func checkTwoPairs(cards []Card) ([]int8, []Card) {
 	twoPairs := []int8{}
@@ -169,7 +282,7 @@ func checkPoker(cards []Card) (int8, []Card) {
 	return result, kickers
 }
 
-func checkStraight(cards []Card) (int8) {
+func checkStraight(cards []Card) int8 {
 	store := make(map[int8]int8)
 	for _, card := range cards {
 		store[card.Number]++
@@ -182,7 +295,7 @@ func checkStraight(cards []Card) (int8) {
 	for _, nr := range getAllNumbers(true) {
 		if _, ok := store[nr]; ok {
 			consecutive++
-			if consecutive >=5 {
+			if consecutive >= 5 {
 				found = nr
 			}
 		} else {
@@ -192,7 +305,7 @@ func checkStraight(cards []Card) (int8) {
 	return found
 }
 
-func checkFullHouse(cards []Card) ([]int8) {
+func checkFullHouse(cards []Card) []int8 {
 	trips, kickers := checkTrips(cards)
 	if trips > 0 {
 		pair, _ := checkMultiples(kickers, 2, 0)
@@ -225,7 +338,7 @@ func checkStraightFlush(cards []Card) int8 {
 	return 0
 }
 
-func checkFlush(cards []Card) ([]int8) {
+func checkFlush(cards []Card) []int8 {
 	store := make(map[Char][]int8)
 	for _, card := range cards {
 		store[card.Suit] = append(store[card.Suit], card.Number)
@@ -255,13 +368,13 @@ func checkFlush(cards []Card) ([]int8) {
 }
 
 type Outcome struct {
-	Win int
-	Tie int
+	Win  int
+	Tie  int
 	Lose int
 }
 
 func getOutcomes() Outcome {
-	return Outcome{1,2,3}
+	return Outcome{1, 2, 3}
 }
 
 // Registers a players best hand and determines if it beats the previous best
@@ -295,7 +408,7 @@ func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCom
 		} else if c1 > c2 {
 			return outcomes.Win // greater
 		}
-		return outcomes.Lose	// lower
+		return outcomes.Lose // lower
 	}
 
 	numberCompare := func(k1, k2 []int8) int {
@@ -314,10 +427,10 @@ func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCom
 	kickerCompare := func(k1, k2 []Card) int {
 		var k1n, k2n []int8
 		for _, v := range k1 {
-			k1n	= append(k1n, v.Number)
+			k1n = append(k1n, v.Number)
 		}
 		for _, v := range k2 {
-			k2n	= append(k2n, v.Number)
+			k2n = append(k2n, v.Number)
 		}
 		return numberCompare(k1n, k2n)
 	}
@@ -381,49 +494,49 @@ func casinoWorker(results chan<- int, jobs <-chan Game) {
 
 			// The best hand rank returns the lower value
 			foundInt = checkStraightFlush(playerCardPool)
-			if foundInt > 0{
+			if foundInt > 0 {
 				combo := PlayerCombination{combos.StraightFlush, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt, kickers = checkPoker(playerCardPool)
-			if foundInt > 0{
+			if foundInt > 0 {
 				combo := PlayerCombination{combos.Poker, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundSlice = checkFullHouse(playerCardPool)
-			if len(foundSlice) > 0{
+			if len(foundSlice) > 0 {
 				combo := PlayerCombination{combos.FullHouse, foundSlice, []Card{}}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundSlice = checkFlush(playerCardPool)
-			if len(foundSlice) > 0{
+			if len(foundSlice) > 0 {
 				combo := PlayerCombination{combos.Flush, foundSlice, []Card{}}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt = checkStraight(playerCardPool)
-			if foundInt > 0{
+			if foundInt > 0 {
 				combo := PlayerCombination{combos.Straight, []int8{foundInt}, []Card{}}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt, kickers = checkTrips(playerCardPool)
-			if foundInt > 0{
+			if foundInt > 0 {
 				combo := PlayerCombination{combos.Trips, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundSlice, kickers = checkTwoPairs(playerCardPool)
-			if len(foundSlice) == 2{
+			if len(foundSlice) == 2 {
 				combo := PlayerCombination{combos.TwoPairs, foundSlice, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt, kickers = checkOnePair(playerCardPool)
-			if foundInt > 0{
+			if foundInt > 0 {
 				combo := PlayerCombination{combos.OnePair, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
@@ -485,12 +598,12 @@ func main() {
 	}
 
 	var workers, simulations int
-	for ;workers==0; {
+	for workers == 0 {
 		fmt.Println("Number of threads to use: ")
 		fmt.Scanf("%d", &workers)
 	}
 
-	for ;simulations==0; {
+	for simulations == 0 {
 		fmt.Println("Number of simulated games to run: ")
 		fmt.Scanf("%d", &simulations)
 	}
@@ -510,7 +623,7 @@ func main() {
 		setting := Game{
 			Table: table,
 			Hands: hands,
-			Deck: deckDestination,
+			Deck:  deckDestination,
 		}
 		jobsChannel <- setting
 	}
@@ -520,7 +633,7 @@ func main() {
 	winCount := 0
 
 	for i := 0; i < simulations; i++ {
-		winner := <- resultsChannel
+		winner := <-resultsChannel
 		if winner >= 0 {
 			results[winner]++
 			winCount++
@@ -530,11 +643,11 @@ func main() {
 	simulationsF := float64(simulations)
 
 	for i, wins := range results {
-		winProbability := float64(wins)/simulationsF*100
+		winProbability := float64(wins) / simulationsF * 100
 		fmt.Printf("Player ID %v win probability: %f%% \n", i, winProbability)
 	}
 
-	splitProbability := (simulationsF-float64(winCount))/simulationsF*100
+	splitProbability := (simulationsF - float64(winCount)) / simulationsF * 100
 	fmt.Printf("Split probability: %f%% \n\n", splitProbability)
 
 	elapsed := time.Since(start)
