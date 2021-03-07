@@ -65,19 +65,34 @@ func getRandomCardsFromDeck(deck *[]Card, nr int) ([]Card) {
 }
 
 // Gets a human-readable combination name
-func getCombinationType (input int8) (string) {
-	mapping := map[int]string{
-		1: "Straight Flush",
-		2: "Poker",
-		3: "Full House",
-		4: "Flush",
-		5: "Straight",
-		6: "Trips",
-		7: "Two Pairs",
-		8: "One Pair",
-		9: "High Card",
+func getCombinationName (input int8) (string) {
+	combos := getCombinations()
+	mapping := map[int8]string{
+		combos.StraightFlush: "Straight Flush",
+		combos.Poker: "Poker",
+		combos.FullHouse: "Full House",
+		combos.Flush: "Flush",
+		combos.Straight: "Straight",
+		combos.Trips: "Trips",
+		combos.TwoPairs: "Two Pairs",
+		combos.OnePair: "One Pair",
+		combos.HighCard: "High Card",
 	}
-	return mapping[int(input)]
+	return mapping[input]
+}
+
+func getCombinations () Combinations {
+	return  Combinations{
+		StraightFlush: 1,
+		Poker:         2,
+		FullHouse:     3,
+		Flush:         4,
+		Straight:      5,
+		Trips:         6,
+		TwoPairs:      7,
+		OnePair:       8,
+		HighCard:      9,
+	}
 }
 
 // Checks if the deck has duplicate cards

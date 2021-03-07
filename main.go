@@ -29,6 +29,18 @@ func (t *CommunityCards) status() int {
 	}
 }
 
+type Combinations struct {
+	StraightFlush int8
+	Poker int8
+	FullHouse int8
+	Flush int8
+	Straight int8
+	Trips int8
+	TwoPairs int8
+	OnePair int8
+	HighCard int8
+}
+
 type Card struct {
 	Number int8
 	Suit   Char
@@ -43,9 +55,9 @@ type PlayerCombination struct {
 // Formats the players hand
 func (combo PlayerCombination) print() string {
 	if len(combo.Kickers) == 0 {
-		return fmt.Sprintf("%v with cards %v\n", getCombinationType(combo.CombinationID), combo.Data)
+		return fmt.Sprintf("%v with cards %v\n", getCombinationName(combo.CombinationID), combo.Data)
 	}
-	return fmt.Sprintf("%v with cards %v and with kickers %v\n", getCombinationType(combo.CombinationID), combo.Data, combo.Kickers)
+	return fmt.Sprintf("%v with cards %v and with kickers %v\n", getCombinationName(combo.CombinationID), combo.Data, combo.Kickers)
 }
 
 type ByNumber []Card
@@ -311,15 +323,16 @@ func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCom
 	}
 
 	var outcome int
+	combos := getCombinations()
 	switch candidate.CombinationID {
-	case 1, 3, 4, 5:	// straight flush, normal straight, full house or flush
+	case combos.StraightFlush, combos.Straight, combos.FullHouse, combos.Flush:
 		outcome = numberCompare(candidate.Data, (*lastBest).Data)
-	case 2, 6, 7, 8: // poker,  trips, two pair, on pair
+	case combos.Poker, combos.Trips, combos.TwoPairs, combos.OnePair:
 		outcome = numberCompare(candidate.Data, (*lastBest).Data)
 		if outcome == outcomes.Tie {
 			outcome = kickerCompare(candidate.Kickers, (*lastBest).Kickers)
 		}
-	case 9: // high card
+	case combos.HighCard:
 		outcome = kickerCompare(candidate.Kickers, (*lastBest).Kickers)
 	default:
 		outcome = outcomes.Tie
@@ -340,6 +353,7 @@ func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCom
 // Retrieves scenarios from the job queue and crunches them
 func casinoWorker(results chan<- int, jobs <-chan Game) {
 	fmt.Println("Starting worker")
+	combos := getCombinations()
 
 	// Retrieve a single job (= one game)
 	for work := range jobs {
@@ -368,55 +382,55 @@ func casinoWorker(results chan<- int, jobs <-chan Game) {
 			// The best hand rank returns the lower value
 			foundInt = checkStraightFlush(playerCardPool)
 			if foundInt > 0{
-				combo := PlayerCombination{1, []int8{foundInt}, kickers}
+				combo := PlayerCombination{combos.StraightFlush, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt, kickers = checkPoker(playerCardPool)
 			if foundInt > 0{
-				combo := PlayerCombination{2, []int8{foundInt}, kickers}
+				combo := PlayerCombination{combos.Poker, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundSlice = checkFullHouse(playerCardPool)
 			if len(foundSlice) > 0{
-				combo := PlayerCombination{3, foundSlice, []Card{}}
+				combo := PlayerCombination{combos.FullHouse, foundSlice, []Card{}}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundSlice = checkFlush(playerCardPool)
 			if len(foundSlice) > 0{
-				combo := PlayerCombination{4, foundSlice, []Card{}}
+				combo := PlayerCombination{combos.Flush, foundSlice, []Card{}}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt = checkStraight(playerCardPool)
 			if foundInt > 0{
-				combo := PlayerCombination{5, []int8{foundInt}, []Card{}}
+				combo := PlayerCombination{combos.Straight, []int8{foundInt}, []Card{}}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt, kickers = checkTrips(playerCardPool)
 			if foundInt > 0{
-				combo := PlayerCombination{6, []int8{foundInt}, kickers}
+				combo := PlayerCombination{combos.Trips, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundSlice, kickers = checkTwoPairs(playerCardPool)
 			if len(foundSlice) == 2{
-				combo := PlayerCombination{7, foundSlice, kickers}
+				combo := PlayerCombination{combos.TwoPairs, foundSlice, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			foundInt, kickers = checkOnePair(playerCardPool)
 			if foundInt > 0{
-				combo := PlayerCombination{8, []int8{foundInt}, kickers}
+				combo := PlayerCombination{combos.OnePair, []int8{foundInt}, kickers}
 				registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 				continue
 			}
 			sort.Sort(sort.Reverse(ByNumber(playerCardPool)))
 			playerCardPool = playerCardPool[:5]
-			combo := PlayerCombination{9, []int8{}, playerCardPool}
+			combo := PlayerCombination{combos.HighCard, []int8{}, playerCardPool}
 			registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 		}
 
