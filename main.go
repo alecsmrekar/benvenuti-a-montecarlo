@@ -232,7 +232,7 @@ func checkMultiples(cards []Card, nr int, kickerNr int) (int8, []Card) {
 	// Only keep the highest pair
 	var max int8 = 0
 	for i, _ := range values {
-		if i > max && max != 1 {
+		if (i > max && max != 1) || i == 1 {
 			max = i
 		}
 	}
@@ -254,8 +254,9 @@ func checkMultiples(cards []Card, nr int, kickerNr int) (int8, []Card) {
 
 // Tries to find two pairs
 func checkTwoPairs(cards []Card) ([]int8, []Card) {
+	kickerNr := len(cards) - 2
 	twoPairs := []int8{}
-	found, kickers := checkMultiples(cards, 2, 3)
+	found, kickers := checkMultiples(cards, 2, kickerNr)
 	if found == 0 {
 		return twoPairs, kickers
 	}
@@ -377,6 +378,46 @@ func getOutcomes() Outcome {
 	return Outcome{1, 2, 3}
 }
 
+func greaterEqualOrLower(c1 int8, c2 int8) int {
+	outcomes := getOutcomes()
+	if c1 == c2 {
+		return outcomes.Tie // equal
+	} else if c1 == 1 {
+		return outcomes.Win // greater
+	} else if c2 == 1 {
+		return outcomes.Lose // greater
+	} else if c1 > c2 {
+		return outcomes.Win // greater
+	}
+	return outcomes.Lose // lower
+}
+
+// Values coming into this function should already be sorted by strength
+func numberCompare(k1, k2 []int8) int {
+	outcomes := getOutcomes()
+	if len(k1) != len(k2) {
+		panic("Kicker length should be the same")
+	}
+	for i, _ := range k1 {
+		result := greaterEqualOrLower(k1[i], k2[i])
+		if result != outcomes.Tie {
+			return result
+		}
+	}
+	return outcomes.Tie
+}
+
+func kickerCompare(k1, k2 []Card) int {
+	var k1n, k2n []int8
+	for _, v := range k1 {
+		k1n = append(k1n, v.Number)
+	}
+	for _, v := range k2 {
+		k2n = append(k2n, v.Number)
+	}
+	return numberCompare(k1n, k2n)
+}
+
 // Registers a players best hand and determines if it beats the previous best
 func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCombination, winners *int) {
 	fmt.Printf("Player %v has: %v", id, candidate.print())
@@ -395,45 +436,7 @@ func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCom
 
 	// From here down, the previous best and the candidate have the best combination
 	// We need to compare in more detail
-
 	outcomes := getOutcomes()
-
-	greaterEqualOrLower := func(c1 int8, c2 int8) int {
-		if c1 == c2 {
-			return outcomes.Tie // equal
-		} else if c1 == 1 {
-			return outcomes.Win // greater
-		} else if c2 == 1 {
-			return outcomes.Lose // greater
-		} else if c1 > c2 {
-			return outcomes.Win // greater
-		}
-		return outcomes.Lose // lower
-	}
-
-	numberCompare := func(k1, k2 []int8) int {
-		if len(k1) != len(k2) {
-			panic("Kicker length should be the same")
-		}
-		for i, _ := range k1 {
-			result := greaterEqualOrLower(k1[i], k2[i])
-			if result != outcomes.Tie {
-				return result
-			}
-		}
-		return outcomes.Tie
-	}
-
-	kickerCompare := func(k1, k2 []Card) int {
-		var k1n, k2n []int8
-		for _, v := range k1 {
-			k1n = append(k1n, v.Number)
-		}
-		for _, v := range k2 {
-			k2n = append(k2n, v.Number)
-		}
-		return numberCompare(k1n, k2n)
-	}
 
 	var outcome int
 	combos := getCombinations()
