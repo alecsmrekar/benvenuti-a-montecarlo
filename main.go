@@ -1,12 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
+
+var debugMode bool = false
 
 type Char byte
 
@@ -420,7 +426,9 @@ func kickerCompare(k1, k2 []Card) int {
 
 // Registers a players best hand and determines if it beats the previous best
 func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCombination, winners *int) {
-	fmt.Printf("Player %v has: %v", id, candidate.print())
+	if debugMode {
+		fmt.Printf("Player %v has: %v", id, candidate.print())
+	}
 
 	// If there is not previous hand, this hand wins automatically
 	// If this hand has the better combinations, it wins
@@ -468,7 +476,9 @@ func registerPlayerHand(id int, candidate PlayerCombination, lastBest *PlayerCom
 
 // Retrieves scenarios from the job queue and crunches them
 func casinoWorker(results chan<- int, jobs <-chan Game) {
-	fmt.Println("Starting worker")
+	if debugMode {
+		fmt.Println("Starting worker")
+	}
 	combos := getCombinations()
 
 	// Retrieve a single job (= one game)
@@ -550,14 +560,18 @@ func casinoWorker(results chan<- int, jobs <-chan Game) {
 			registerPlayerHand(playerIndex, combo, &lastBest, &weHaveAWinner)
 		}
 
-		if weHaveAWinner >= 0 {
-			fmt.Printf("Player %v wins\n\n", weHaveAWinner)
-		} else {
-			fmt.Println("No winner")
+		if debugMode {
+			if weHaveAWinner >= 0 {
+				fmt.Printf("Player %v wins\n\n", weHaveAWinner)
+			} else {
+				fmt.Println("No winner")
+			}
 		}
 		results <- weHaveAWinner
 	}
-	fmt.Println("Worker done")
+	if debugMode {
+		fmt.Println("Worker done")
+	}
 }
 
 func main() {
@@ -565,49 +579,85 @@ func main() {
 	deck := createDeck()
 	var hands []Hand
 
-	h1 := Hand{
-		[2]Card{
-			Card{1, 'H'},
-			Card{2, 'H'},
-		},
-	}
-	h2 := Hand{
-		[2]Card{
-			Card{1, 'C'},
-			Card{2, 'C'},
-		},
-	}
-	h3 := Hand{
-		[2]Card{
-			Card{10, 'C'},
-			Card{1, 'D'},
-		},
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("\nWelcome\n")
+	fmt.Println("Please enter the players hands, one hand line")
+	fmt.Println("Ace=1, Jack=11, Queen=12, King=13")
+	fmt.Println("Example: 7H 11S")
+	fmt.Println("Press enter after you entered the last player")
+	fmt.Println("\n")
+	playerNr := 0
+
+	for {
+		fmt.Printf("Player %v -> ", playerNr)
+		text, _ := reader.ReadString('\n')
+		text = strings.Replace(text, "\n", "", -1)
+
+		// Break when a blank enter is pressed
+		if strings.Compare("", text) == 0 {
+			break
+		}
+		spacePos := strings.Index(text, " ")
+		positions := []int{spacePos, len(text)}
+		hand := Hand{}
+
+		// Loop the two cards
+		for i, pos := range positions {
+			startI := 0
+			if i == 1{
+				startI = spacePos+1
+			}
+			numberInt, _ := strconv.Atoi(text[startI:pos-1])
+			hand.Cards[i].Number = int8(numberInt)
+			oba := []byte(text[pos-1:pos])
+			hand.Cards[i].Suit = Char(oba[0])
+		}
+		addHandToTable(hand, &deck, &hands)
+		playerNr++
 	}
 
-	addHandToTable(h1, &deck, &hands)
-	addHandToTable(h2, &deck, &hands)
-	addHandToTable(h3, &deck, &hands)
-
-	var insertCards = []Card{
-		//Card{6, 'H'},
-	}
 	table := CommunityCards{
-		insertCards,
+		[]Card{},
 	}
 
-	// Remove community cards from deck
-	for _, c := range table.Cards {
-		addCardToTable(c, &deck)
+	fmt.Println("\nEnter the community cards on the table")
+	fmt.Println("Flop Example: 13S 7S 1H")
+	fmt.Println("Press enter if it's preflop\n")
+	fmt.Print("Table -> ")
+	tableInput, _ := reader.ReadString('\n')
+	tableInput = strings.Replace(tableInput, "\n", "", -1) + " "
+
+
+	cardPositions := []int{0}
+	for i, ch := range tableInput {
+		if strings.Compare(" ", string(ch)) == 0 {
+			cardPositions = append(cardPositions, i+1)
+		}
+	}
+
+	for i, pos := range cardPositions[:len(cardPositions)-1] {
+		nextPos := cardPositions[i+1]
+		if (nextPos - pos) <= 1 {
+			break
+		}
+		numberInt, _ := strconv.Atoi(tableInput[pos:nextPos-2])
+		oba := []byte(tableInput[nextPos-2:nextPos-1])
+		crd := Card{
+			Number: int8(numberInt),
+			Suit: Char(oba[0]),
+		}
+		table.Cards = append(table.Cards, crd)
+		addCardToTable(crd, &deck)
 	}
 
 	var workers, simulations int
 	for workers == 0 {
-		fmt.Println("Number of threads to use: ")
+		fmt.Print("\nNumber of threads to use: ")
 		fmt.Scanf("%d", &workers)
 	}
 
 	for simulations == 0 {
-		fmt.Println("Number of simulated games to run: ")
+		fmt.Print("Number of simulated games to run: ")
 		fmt.Scanf("%d", &simulations)
 	}
 
@@ -642,10 +692,11 @@ func main() {
 			winCount++
 		}
 	}
-	fmt.Println("-------")
+	fmt.Println("\n-------\n")
 	simulationsF := float64(simulations)
 
-	for i, wins := range results {
+	for i:=0; i<len(hands); i++ {
+		wins := results[i]
 		winProbability := float64(wins) / simulationsF * 100
 		fmt.Printf("Player ID %v win probability: %f%% \n", i, winProbability)
 	}
