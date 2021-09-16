@@ -67,19 +67,31 @@ func (combo PlayerCombination) print() string {
 	return fmt.Sprintf("%v with cards %v and with kickers %v\n", getCombinationName(combo.CombinationID), combo.Data, combo.Kickers)
 }
 
+// ByNumber Type used for sorting a group of cards by the face numbers (From 2 to the Ace).
 type ByNumber []Card
 
-// Implement sort interface for cards
-func (a ByNumber) Len() int { return len(a) }
+// Len Sort interface
+func (a ByNumber) Len() int {
+	return len(a)
+}
+
+// Less Sort interface
 func (a ByNumber) Less(i, j int) bool {
+	// Ace is 1, so first check that.
 	if a[i].Number == 1 {
 		return false
 	} else if a[j].Number == 1 {
 		return true
 	}
+	// If there are no aces involved, do a simple comparison.
 	return int(a[i].Number) < int(a[j].Number)
 }
-func (a ByNumber) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+// Swap Sort interface
+func (a ByNumber) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
 
 type Hand struct {
 	Cards [2]Card
@@ -580,12 +592,12 @@ func main() {
 	var hands []Hand
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\nWelcome\n")
+	fmt.Println("\nWelcome!\n ")
 	fmt.Println("Please enter the players hands, one hand line")
 	fmt.Println("Ace=1, Jack=11, Queen=12, King=13")
 	fmt.Println("Example: 7H 11S")
 	fmt.Println("Press enter after you entered the last player")
-	fmt.Println("\n")
+	fmt.Println("\n ")
 	playerNr := 0
 
 	for {
@@ -622,7 +634,7 @@ func main() {
 
 	fmt.Println("\nEnter the community cards on the table")
 	fmt.Println("Flop Example: 13S 7S 1H")
-	fmt.Println("Press enter if it's preflop\n")
+	fmt.Println("Press enter if it's preflop\n ")
 	fmt.Print("Table -> ")
 	tableInput, _ := reader.ReadString('\n')
 	tableInput = strings.Replace(tableInput, "\n", "", -1) + " "
@@ -652,7 +664,7 @@ func main() {
 
 	var workers, simulations int
 	for workers == 0 {
-		fmt.Print("\nNumber of threads to use: ")
+		fmt.Print("\nNumber of goroutines to use: ")
 		fmt.Scanf("%d", &workers)
 	}
 
@@ -692,7 +704,7 @@ func main() {
 			winCount++
 		}
 	}
-	fmt.Println("\n-------\n")
+	fmt.Println("\n-------\n ")
 	simulationsF := float64(simulations)
 
 	for i:=0; i<len(hands); i++ {
